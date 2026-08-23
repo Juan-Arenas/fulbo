@@ -1,0 +1,190 @@
+* {
+  box-sizing: border-box;
+}
+
+html {
+  margin: 0;
+  padding: 0;
+  background: #08090d;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: #08090d;
+  color: #f5f5f7;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid #b8ff3d;
+  outline-offset: 2px;
+}
+
+/* APP */
+
+.sp-app {
+  min-height: 100vh;
+  background: #08090d;
+  color: #f5f5f7;
+}
+
+.sp-main {
+  min-height: calc(100vh - 76px);
+}
+
+/* HEADER */
+
+.sp-header {
+  height: 76px;
+  padding: 0 5%;
+  background: #0b0c10;
+  border-bottom: 1px solid #20232b;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.sp-logo {
+  border: 0;
+  background: transparent;
+  padding: 0;
+
+  color: #f5f5f7;
+
+  font-size: 21px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+
+  cursor: pointer;
+}
+
+.sp-logo span,
+.sp-footer-logo span {
+  color: #b8ff3d;
+}
+
+.sp-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sp-nav button {
+  border: 1px solid transparent;
+  background: transparent;
+
+  color: #9da2ad;
+
+  padding: 9px 13px;
+  border-radius: 9px;
+
+  cursor: pointer;
+
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.sp-nav button:hover {
+  background: #15181e;
+  color: #fff;
+  border-color: #292e38;
+}
+
+.sp-cart-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sp-cart-count {
+  min-width: 20px;
+  height: 20px;
+
+  display: grid;
+  place-items: center;
+
+  border-radius: 50%;
+
+  background: #b8ff3d;
+  color: #08090d;
+
+  font-size: 10px;
+  font-weight: 900;
+}
+
+/* FOOTER */
+
+.sp-footer {
+  border-top: 1px solid #20232b;
+  background: #0b0c10;
+
+  min-height: 110px;
+  padding: 30px 5%;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.sp-footer-logo {
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.sp-footer-text {
+  color: #626978;
+  font-size: 11px;
+}
+
+/* RESPONSIVE */
+
+@media (max-width: 700px) {
+  .sp-header {
+    padding: 0 20px;
+  }
+
+  .sp-logo {
+    font-size: 18px;
+  }
+
+  .sp-nav button {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  .sp-footer {
+    padding: 25px 20px;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
