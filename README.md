@@ -1,53 +1,16 @@
-# SportPhoto — sistema integrado
+# React + Vite
 
-Esta versión toma la web pública original de SportPhoto como portada y conecta el sistema React/Supabase que construimos detrás de ella.
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
-## Rutas
+Currently, two official plugins are available:
 
-- `/` — tienda pública con el diseño original, eventos reales, búsqueda y carrito.
-- `/evento/:id` — galería pública del evento.
-- `/cart` — carrito.
-- `/checkout` — checkout y redirección a Mercado Pago.
-- `/login` — acceso del fotógrafo.
-- `/admin` — dashboard.
-- `/admin/events/new` — crear evento.
-- `/admin/events/:id` — gestionar evento.
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
 
-## Variables públicas de Netlify
+## React Compiler
 
-Configura:
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
 
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
+## Expanding the ESLint configuration
 
-No subas claves secretas al repositorio.
-
-## Secretos de Supabase Edge Functions
-
-Configura en Supabase:
-
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `MERCADOPAGO_ACCESS_TOKEN`
-- `SITE_URL=https://queridofulbo.netlify.app`
-
-## Despliegue Netlify
-
-- Base directory: vacío
-- Build command: `npm run build`
-- Publish directory: `dist`
-
-`public/_redirects` ya está incluido para React Router.
-
-## Edge Functions
-
-Incluidas:
-
-- `supabase/functions/create-payment`
-- `supabase/functions/mercadopago-webhook`
-
-Despliega ambas con Supabase CLI y configura los secretos antes de probar pagos.
-
-## Importante
-
-El ZIP no contiene `node_modules`, `.env` ni `dist`. Ejecuta `npm install` antes de desarrollar localmente.
-
+If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.

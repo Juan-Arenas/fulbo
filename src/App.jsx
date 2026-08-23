@@ -1,19 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { supabase } from './lib/supabase'
-
-import AppLayout from './components/AppLayout'
+import CreateEvent from './pages/CreateEvent'
+import EventDetails from './pages/EventDetails'
+import PublicEvent from './pages/PublicEvent'
 import Cart from './pages/Cart'
 import Checkout from './pages/Checkout'
-import CreateEvent from './pages/CreateEvent'
-import Dashboard from './pages/Dashboard'
-import EventDetails from './pages/EventDetails'
 import Login from './pages/Login'
-import PublicEvent from './pages/PublicEvent'
+import Dashboard from './pages/Dashboard'
+import AppLayout from './components/AppLayout'
+import PaymentResult from './pages/PaymentResult'
 
 const CART_KEY = 'sportphoto_cart'
 
-function formatMoney(value) {
+function money(value) {
   return new Intl.NumberFormat('es-CO', {
     style: 'currency',
     currency: 'COP',
@@ -21,400 +21,160 @@ function formatMoney(value) {
   }).format(Number(value || 0))
 }
 
-async function getPhotoUrl(photo) {
-  if (photo.url) return photo.url
-  if (!photo.file_path) return null
-
-  const { data } = await supabase.storage
-    .from('event-photos')
-    .createSignedUrl(photo.file_path, 3600)
-
-  return data?.signedUrl || null
-}
-
 function Home() {
   const navigate = useNavigate()
   const [events, setEvents] = useState([])
   const [photos, setPhotos] = useState([])
   const [query, setQuery] = useState('')
-  const [eventFilter, setEventFilter] = useState('')
-  const [results, setResults] = useState([])
-  const [cartCount, setCartCount] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [searching, setSearching] = useState(false)
   const [error, setError] = useState('')
+  const [cartCount, setCartCount] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(CART_KEY) || '[]').reduce((n, item) => n + Number(item.quantity || 1), 0)
+    } catch { return 0 }
+  })
 
   useEffect(() => {
-    loadHome()
-    updateCartCount()
-
-    const update = () => updateCartCount()
-    window.addEventListener('sportphoto-cart-updated', update)
-    window.addEventListener('storage', update)
-
+    const load = async () => {
+      setLoading(true)
+      setError('')
+      try {
+        const [{ data: eventData, error: eventError }, { data: photoData, error: photoError }] = await Promise.all([
+          supabase.from('events').select('*').order('event_date', { ascending: false }),
+          supabase.from('photos').select('*').eq('active', true).order('created_at', { ascending: false }).limit(12),
+        ])
+        if (eventError) throw eventError
+        if (photoError) throw photoError
+        setEvents(eventData || [])
+        const withUrls = await Promise.all((photoData || []).map(async (photo) => {
+          if (!photo.file_path) return { ...photo, url: null }
+          const { data } = await supabase.storage.from('event-photos').createSignedUrl(photo.file_path, 3600)
+          return { ...photo, url: data?.signedUrl || null }
+        }))
+        setPhotos(withUrls)
+      } catch (e) {
+        console.error(e)
+        setError(e?.message || 'No se pudieron cargar los eventos.')
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+    const updateCart = () => {
+      try { setCartCount(JSON.parse(localStorage.getItem(CART_KEY) || '[]').reduce((n, item) => n + Number(item.quantity || 1), 0)) } catch { setCartCount(0) }
+    }
+    window.addEventListener('storage', updateCart)
+    window.addEventListener('sportphoto-cart-updated', updateCart)
     return () => {
-      window.removeEventListener('sportphoto-cart-updated', update)
-      window.removeEventListener('storage', update)
+      window.removeEventListener('storage', updateCart)
+      window.removeEventListener('sportphoto-cart-updated', updateCart)
     }
   }, [])
 
-  async function loadHome() {
-    setLoading(true)
-    setError('')
-
-    try {
-      const { data: eventData, error: eventError } = await supabase
-        .from('events')
-        .select('*')
-        .order('event_date', { ascending: false })
-
-      if (eventError) throw eventError
-
-      const { data: photoData, error: photoError } = await supabase
-        .from('photos')
-        .select('*')
-        .eq('active', true)
-        .order('created_at', { ascending: false })
-
-      if (photoError) throw photoError
-
-      setEvents(eventData || [])
-      setPhotos(photoData || [])
-    } catch (err) {
-      console.error(err)
-      setError(err?.message || 'No se pudieron cargar los eventos.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  function updateCartCount() {
-    try {
-      const saved = localStorage.getItem(CART_KEY)
-      const cart = saved ? JSON.parse(saved) : []
-      setCartCount(Array.isArray(cart)
-        ? cart.reduce((sum, item) => sum + Number(item.quantity || 1), 0)
-        : 0)
-    } catch {
-      setCartCount(0)
-    }
-  }
-
-  async function search() {
-    const value = query.trim().toLowerCase()
-
-    if (!value) {
-      setResults([])
-      return
-    }
-
-    setSearching(true)
-    setError('')
-
-    try {
-      const matching = photos.filter((photo) => {
-        const dorsal = String(photo.dorsal || '').toLowerCase()
-        const name = String(photo.participant_name || '').toLowerCase()
-        const fileName = String(photo.file_name || '').toLowerCase()
-
-        return (
-          (!eventFilter || photo.event_id === eventFilter) &&
-          (dorsal === value || name.includes(value) || fileName.includes(value))
-        )
-      })
-
-      const enriched = await Promise.all(
-        matching.slice(0, 40).map(async (photo) => ({
-          ...photo,
-          url: await getPhotoUrl(photo),
-        }))
-      )
-
-      setResults(enriched)
-    } catch (err) {
-      console.error(err)
-      setError('No se pudieron cargar las fotografías.')
-    } finally {
-      setSearching(false)
-    }
-  }
-
-  function addToCart(photo) {
-    try {
-      const saved = localStorage.getItem(CART_KEY)
-      const cart = saved ? JSON.parse(saved) : []
-      const current = Array.isArray(cart) ? cart : []
-
-      if (current.some((item) => item.id === photo.id)) {
-        navigate('/cart')
-        return
-      }
-
-      const item = {
-        id: photo.id,
-        event_id: photo.event_id,
-        file_path: photo.file_path || null,
-        preview_path: photo.preview_path || null,
-        thumbnail_path: photo.thumbnail_path || null,
-        file_name: photo.file_name || 'Fotografía',
-        dorsal: photo.dorsal || '',
-        participant_name: photo.participant_name || '',
-        price: Number(photo.price || 0),
-        quantity: 1,
-        url: photo.url || null,
-      }
-
-      localStorage.setItem(CART_KEY, JSON.stringify([...current, item]))
-      window.dispatchEvent(new Event('sportphoto-cart-updated'))
-      updateCartCount()
-    } catch (err) {
-      console.error(err)
-      setError('No se pudo agregar la fotografía al carrito.')
-    }
-  }
-
-  function eventName(id) {
-    return events.find((event) => event.id === id)?.name || 'Evento'
-  }
-
-  const visibleEvents = useMemo(() => events.slice(0, 12), [events])
+  const filteredPhotos = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return photos
+    return photos.filter((p) => [p.file_name, p.dorsal, p.participant_name].some((v) => String(v || '').toLowerCase().includes(q)))
+  }, [photos, query])
 
   return (
-    <div className="storefront">
-      <header className="top">
-        <nav className="nav">
-          <button className="brand" onClick={() => navigate('/')}>
-            <span className="mark">SP</span>
-            SportPhoto
+    <div className="legacy-home">
+      <header className="legacy-top">
+        <nav className="legacy-nav">
+          <button className="legacy-brand" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+            <span className="legacy-mark">SP</span> SPORTPHOTO
           </button>
-
-          <div className="links">
-            <button onClick={() => document.getElementById('eventos')?.scrollIntoView({ behavior: 'smooth' })}>
-              Eventos
-            </button>
-            <button onClick={() => document.getElementById('buscar')?.scrollIntoView({ behavior: 'smooth' })}>
-              Buscar
-            </button>
-            <button onClick={() => document.getElementById('como')?.scrollIntoView({ behavior: 'smooth' })}>
-              Cómo funciona
-            </button>
-            <button onClick={() => navigate('/login')}>
-              Panel fotógrafo
-            </button>
+          <div className="legacy-links">
+            <button onClick={() => document.getElementById('eventos')?.scrollIntoView({ behavior: 'smooth' })}>Eventos</button>
+            <button onClick={() => document.getElementById('como-funciona')?.scrollIntoView({ behavior: 'smooth' })}>Cómo funciona</button>
           </div>
-
-          <div className="nav-actions">
-            <button className="pill" onClick={() => navigate('/cart')}>
-              🛒 <span className="count">{cartCount}</span>
-            </button>
-            <button className="primary" onClick={() => navigate('/login')}>
-              Panel fotógrafo
-            </button>
+          <div className="legacy-actions">
+            <button className="legacy-pill" onClick={() => navigate('/cart')}>Carrito {cartCount > 0 && <b>{cartCount}</b>}</button>
+            <button className="legacy-primary" onClick={() => navigate('/login')}>Iniciar sesión</button>
           </div>
         </nav>
       </header>
 
-      <main>
-        <section className="hero">
-          <div>
-            <div className="eyebrow">Fotografía deportiva profesional</div>
-            <h1>Tu momento,<br /><span>tu foto.</span></h1>
-            <p>
-              Encontrá tus fotografías deportivas en segundos y conservá
-              los momentos que hicieron especial tu competencia.
-            </p>
-
-            <div className="actions">
-              <button
-                className="primary"
-                onClick={() => document.getElementById('buscar')?.scrollIntoView({ behavior: 'smooth' })}
-              >
-                Buscar mis fotos ahora
-              </button>
-              <button
-                className="secondary"
-                onClick={() => document.getElementById('eventos')?.scrollIntoView({ behavior: 'smooth' })}
-              >
-                Ver eventos
-              </button>
-            </div>
-
-            <div className="stats">
-              <div><strong>{events.length}</strong><span>Eventos</span></div>
-              <div><strong>{photos.length}</strong><span>Fotografías</span></div>
-              <div><strong>24/7</strong><span>Acceso online</span></div>
-            </div>
+      <section className="legacy-hero">
+        <div className="legacy-hero-inner">
+          <div className="legacy-eyebrow">FOTOGRAFÍA DEPORTIVA PROFESIONAL</div>
+          <h1>Tu momento.<br /><span>Tu foto.</span></h1>
+          <p>Encuentra las fotografías de tus carreras, partidos y eventos deportivos. Busca por dorsal o nombre y conserva tu mejor momento.</p>
+          <div className="legacy-actions-center">
+            <button className="legacy-primary legacy-big" onClick={() => document.getElementById('eventos')?.scrollIntoView({ behavior: 'smooth' })}>Ver eventos</button>
+            <button className="legacy-secondary legacy-big" onClick={() => navigate('/cart')}>Ver carrito</button>
           </div>
-        </section>
-
-        <section className="search-wrap" id="buscar">
-          <div className="search-card">
-            <div className="search-top">
-              <div>
-                <div className="kicker">Encontrá tu momento</div>
-                <h2>Buscar fotos</h2>
-                <p>Probá con un número de dorsal o nombre.</p>
-              </div>
-              <div className="kicker">Catálogo en vivo</div>
-            </div>
-
-            <div className="search-row">
-              <input
-                className="input"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && search()}
-                placeholder="Ej. 1542 o Juan Pérez"
-              />
-
-              <select
-                className="input"
-                value={eventFilter}
-                onChange={(e) => setEventFilter(e.target.value)}
-              >
-                <option value="">Todos los eventos</option>
-                {events.map((event) => (
-                  <option key={event.id} value={event.id}>
-                    {event.name}
-                  </option>
-                ))}
-              </select>
-
-              <button className="primary" onClick={search} disabled={searching}>
-                {searching ? 'Buscando...' : 'Buscar →'}
-              </button>
-            </div>
-
-            {error && <div className="notice">{error}</div>}
-
-            <div className="results">
-              {!query.trim() ? (
-                <p className="section-sub">
-                  Escribí un dorsal o nombre para buscar tus fotografías.
-                </p>
-              ) : results.length ? (
-                <div className="result-grid">
-                  {results.map((photo) => (
-                    <article className="photo-card" key={photo.id}>
-                      <div className="photo-media">
-                        {photo.url ? (
-                          <img src={photo.url} alt="Fotografía deportiva" />
-                        ) : (
-                          <div style={{ height: 185, display: 'grid', placeItems: 'center' }}>
-                            Sin vista previa
-                          </div>
-                        )}
-                        <div className="watermark">SPORTPHOTO</div>
-                      </div>
-
-                      <div className="photo-info">
-                        <strong>{eventName(photo.event_id)}</strong>
-                        <small>
-                          Dorsal {photo.dorsal || '—'} · {photo.participant_name || 'Participante'}
-                        </small>
-                        <button onClick={() => addToCart(photo)}>
-                          {cartCount && false ? '' : 'Agregar al carrito'}
-                        </button>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <p className="section-sub">
-                  No encontramos fotografías para “{query}”.
-                </p>
-              )}
-            </div>
+          <div className="legacy-stats">
+            <div><strong>{events.length}</strong><span>Eventos</span></div>
+            <div><strong>{photos.length}</strong><span>Fotos recientes</span></div>
+            <div><strong>100%</strong><span>Digital</span></div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <section className="section" id="eventos">
-          <div className="section-head">
-            <div>
-              <div className="kicker">Explorá</div>
-              <h2>Eventos</h2>
-            </div>
-            <p className="section-sub">
-              Cada evento tiene su propia galería y catálogo de fotografías.
-            </p>
+      <section className="legacy-search-wrap">
+        <div className="legacy-search-card">
+          <div className="legacy-search-top">
+            <div><div className="legacy-kicker">ENCUENTRA TU FOTO</div><h2>Busca por dorsal o nombre</h2><p>Los resultados vienen directamente de tus eventos publicados.</p></div>
           </div>
-
-          {loading ? (
-            <div className="empty">Cargando eventos...</div>
-          ) : visibleEvents.length ? (
-            <div className="events">
-              {visibleEvents.map((event) => {
-                const count = photos.filter((photo) => photo.event_id === event.id).length
-
-                return (
-                  <article
-                    className="event"
-                    key={event.id}
-                    onClick={() => navigate(`/evento/${event.id}`)}
-                  >
-                    <img
-                      src={event.cover_url || event.cover || 'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?auto=format&fit=crop&w=1000&q=85'}
-                      alt={event.name}
-                    />
-                    <div className="event-body">
-                      <h3>{event.name}</h3>
-                      <div className="meta">
-                        <span>◷ {event.event_date || event.date || 'Sin fecha'}</span>
-                        <span>⌖ {event.location || event.place || 'Sin ubicación'}</span>
-                      </div>
-                      <div className="event-foot">
-                        <span>{count} fotos</span>
-                        <span>Explorar →</span>
-                      </div>
+          <div className="legacy-search-row">
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Ej. 27, Juan Pérez, dorsal..." />
+            <button className="legacy-primary" onClick={() => document.getElementById('resultados')?.scrollIntoView({ behavior: 'smooth' })}>Buscar</button>
+          </div>
+          <div id="resultados" className="legacy-results">
+            {loading && <div className="legacy-empty">Cargando fotografías...</div>}
+            {!loading && error && <div className="legacy-empty legacy-error">{error}</div>}
+            {!loading && !error && query && filteredPhotos.length === 0 && <div className="legacy-empty">No encontramos fotografías para esa búsqueda.</div>}
+            {!loading && !error && filteredPhotos.length > 0 && (
+              <div className="legacy-photo-grid">
+                {filteredPhotos.map((photo) => (
+                  <article className="legacy-photo-card" key={photo.id}>
+                    <div className="legacy-photo-media">
+                      {photo.url ? <img src={photo.url} alt={photo.file_name || 'Fotografía'} /> : <div className="legacy-photo-placeholder">SPORTPHOTO</div>}
+                    </div>
+                    <div className="legacy-photo-info">
+                      <strong>{photo.participant_name || (photo.dorsal ? `Dorsal ${photo.dorsal}` : 'Fotografía')}</strong>
+                      <small>{photo.dorsal ? `Dorsal ${photo.dorsal}` : photo.file_name}</small>
+                      <button onClick={() => navigate(`/evento/${photo.event_id}`)}>Ver evento</button>
                     </div>
                   </article>
-                )
-              })}
-            </div>
-          ) : (
-            <div className="empty">Todavía no hay eventos publicados.</div>
-          )}
-        </section>
-
-        <section className="how" id="como">
-          <div className="section">
-            <div className="section-head">
-              <div>
-                <div className="kicker">Simple</div>
-                <h2>Cómo funciona</h2>
+                ))}
               </div>
-            </div>
-
-            <div className="steps">
-              <article className="step">
-                <div className="step-num">1</div>
-                <h3>Encontrá tus fotos</h3>
-                <p>Buscá por dorsal o nombre dentro del evento.</p>
-              </article>
-              <article className="step">
-                <div className="step-num">2</div>
-                <h3>Elegí tus momentos</h3>
-                <p>Agregá las fotografías que quieras conservar al carrito.</p>
-              </article>
-              <article className="step">
-                <div className="step-num">3</div>
-                <h3>Comprá y descargá</h3>
-                <p>Completá el checkout y, al aprobarse el pago, recibirás tu compra digital.</p>
-              </article>
-            </div>
+            )}
           </div>
-        </section>
-      </main>
-
-      <footer className="footer">
-        <div className="footer-in">
-          <div className="brand">
-            <span className="mark">SP</span>
-            SportPhoto
-          </div>
-          <p>Plataforma de venta de fotografía deportiva</p>
         </div>
-      </footer>
+      </section>
+
+      <section id="eventos" className="legacy-section">
+        <div className="legacy-section-head"><div><div className="legacy-kicker">EVENTOS</div><h2>Encuentra tu evento</h2><p>Abre un evento para explorar todas sus fotografías.</p></div></div>
+        {loading ? <div className="legacy-empty">Cargando eventos...</div> : events.length === 0 ? <div className="legacy-empty">Todavía no hay eventos publicados.</div> : (
+          <div className="legacy-events">
+            {events.map((event) => (
+              <article className="legacy-event" key={event.id} onClick={() => navigate(`/evento/${event.id}`)}>
+                <div className="legacy-event-cover"><div>SPORTPHOTO</div></div>
+                <div className="legacy-event-body">
+                  <h3>{event.name}</h3>
+                  <div className="legacy-meta"><span>{event.location || 'Evento deportivo'}</span><span>{event.event_date ? new Date(event.event_date).toLocaleDateString('es-CO') : 'Fecha por confirmar'}</span></div>
+                  <div className="legacy-event-foot"><span>Ver fotografías</span><span>→</span></div>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section id="como-funciona" className="legacy-how">
+        <div className="legacy-section">
+          <div className="legacy-section-head"><div><div className="legacy-kicker">CÓMO FUNCIONA</div><h2>De la pista a tu pantalla</h2></div></div>
+          <div className="legacy-steps">
+            <div><b>01</b><h3>Busca tu evento</h3><p>Encuentra el evento deportivo donde participaste.</p></div>
+            <div><b>02</b><h3>Encuentra tu foto</h3><p>Busca por dorsal o nombre y revisa tus fotografías.</p></div>
+            <div><b>03</b><h3>Compra y descarga</h3><p>Añade tus favoritas al carrito y completa el checkout.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <footer className="legacy-footer"><div><strong>SPORTPHOTO</strong><p>Fotografía deportiva profesional.</p></div><button onClick={() => navigate('/login')}>Acceso fotógrafo →</button></footer>
     </div>
   )
 }
@@ -427,6 +187,9 @@ function App() {
         <Route path="/evento/:id" element={<PublicEvent />} />
         <Route path="/cart" element={<Cart />} />
         <Route path="/checkout" element={<Checkout />} />
+        <Route path="/checkout/success" element={<PaymentResult />} />
+        <Route path="/checkout/failure" element={<PaymentResult />} />
+        <Route path="/checkout/pending" element={<PaymentResult />} />
         <Route path="/login" element={<Login />} />
         <Route path="/admin" element={<Dashboard />} />
         <Route path="/admin/events/new" element={<CreateEvent />} />

@@ -4,11 +4,7 @@ import { useNavigate } from 'react-router-dom'
 const CART_KEY = 'sportphoto_cart'
 
 function money(value) {
-  return new Intl.NumberFormat('es-CO', {
-    style: 'currency',
-    currency: 'COP',
-    maximumFractionDigits: 0,
-  }).format(Number(value || 0))
+  return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(Number(value || 0))
 }
 
 export default function Cart() {
@@ -17,23 +13,20 @@ export default function Cart() {
 
   useEffect(() => {
     load()
-    const update = () => load()
-    window.addEventListener('sportphoto-cart-updated', update)
-    window.addEventListener('storage', update)
+    const sync = () => load()
+    window.addEventListener('storage', sync)
+    window.addEventListener('sportphoto-cart-updated', sync)
     return () => {
-      window.removeEventListener('sportphoto-cart-updated', update)
-      window.removeEventListener('storage', update)
+      window.removeEventListener('storage', sync)
+      window.removeEventListener('sportphoto-cart-updated', sync)
     }
   }, [])
 
   function load() {
     try {
-      const saved = localStorage.getItem(CART_KEY)
-      const parsed = saved ? JSON.parse(saved) : []
-      setCart(Array.isArray(parsed) ? parsed : [])
-    } catch {
-      setCart([])
-    }
+      const value = JSON.parse(localStorage.getItem(CART_KEY) || '[]')
+      setCart(Array.isArray(value) ? value : [])
+    } catch { setCart([]) }
   }
 
   function save(next) {
@@ -42,93 +35,51 @@ export default function Cart() {
     window.dispatchEvent(new Event('sportphoto-cart-updated'))
   }
 
-  function remove(id) {
-    save(cart.filter((item) => item.id !== id))
+  function changeQuantity(id, delta) {
+    save(cart.map(item => item.id === id ? { ...item, quantity: Math.max(1, Number(item.quantity || 1) + delta) } : item))
   }
 
-  function quantity(id, delta) {
-    save(cart.map((item) => {
-      if (item.id !== id) return item
-      return { ...item, quantity: Math.max(1, Number(item.quantity || 1) + delta) }
-    }))
-  }
+  function remove(id) { save(cart.filter(item => item.id !== id)) }
+  function clear() { save([]) }
 
-  function clear() {
-    save([])
-  }
-
-  const subtotal = useMemo(
-    () => cart.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1), 0),
-    [cart]
-  )
-
-  const totalItems = useMemo(
-    () => cart.reduce((sum, item) => sum + Number(item.quantity || 1), 0),
-    [cart]
-  )
-
-  const discountRate = totalItems >= 10 ? 0.30 : totalItems >= 5 ? 0.20 : totalItems >= 3 ? 0.10 : 0
-  const discount = subtotal * discountRate
-  const total = subtotal - discount
+  const subtotal = useMemo(() => cart.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1), 0), [cart])
+  const items = useMemo(() => cart.reduce((sum, item) => sum + Number(item.quantity || 1), 0), [cart])
 
   return (
-    <main className="sp-shop-page">
-      <header className="sp-shop-header">
-        <button className="sp-shop-logo" onClick={() => navigate('/')}>
-          <span className="sp-shop-mark">SP</span> SportPhoto
-        </button>
-        <button className="sp-shop-back" onClick={() => navigate('/')}>← Seguir comprando</button>
-      </header>
-
-      <section className="sp-shop-container">
-        <div className="sp-shop-kicker">TU SELECCIÓN</div>
-        <h1>Tu carrito</h1>
-        <p className="sp-shop-subtitle">{totalItems} fotografía{totalItems === 1 ? '' : 's'} seleccionada{totalItems === 1 ? '' : 's'}.</p>
+    <main className="sp-page">
+      <section className="sp-container">
+        <div className="sp-eyebrow">SPORTPHOTO / CARRITO</div>
+        <h1 className="sp-title">Tus fotografías</h1>
+        <p className="sp-subtitle">Revisa tus fotos antes de continuar al checkout.</p>
 
         {!cart.length ? (
-          <div className="sp-shop-empty">
-            <div className="sp-shop-empty-icon">🛒</div>
+          <div className="sp-card sp-empty-page">
+            <div className="sp-empty-icon">🛒</div>
             <h2>Tu carrito está vacío</h2>
-            <p>Busca tus fotografías y agrega las que quieras comprar.</p>
-            <button className="sp-shop-primary" onClick={() => navigate('/')}>Buscar mis fotos</button>
+            <p>Busca un evento y agrega tus mejores fotografías.</p>
+            <button className="sp-primary" onClick={() => navigate('/')}>Ver eventos</button>
           </div>
         ) : (
-          <div className="sp-shop-grid">
-            <section className="sp-shop-list">
-              {cart.map((item) => (
-                <article className="sp-shop-item" key={item.id}>
-                  <div className="sp-shop-thumb">
-                    {item.url ? <img src={item.url} alt="" /> : <span>📸</span>}
-                  </div>
-                  <div className="sp-shop-item-info">
-                    <strong>{item.file_name || 'Fotografía deportiva'}</strong>
-                    <span>{item.participant_name ? item.participant_name : item.dorsal ? `Dorsal ${item.dorsal}` : 'Fotografía'}</span>
-                    <span>{money(item.price)} c/u</span>
-                  </div>
-                  <div className="sp-shop-item-actions">
-                    <div className="sp-qty">
-                      <button onClick={() => quantity(item.id, -1)}>−</button>
-                      <span>{item.quantity || 1}</span>
-                      <button onClick={() => quantity(item.id, 1)}>+</button>
-                    </div>
-                    <strong>{money(Number(item.price || 0) * Number(item.quantity || 1))}</strong>
-                    <button className="sp-remove" onClick={() => remove(item.id)}>Quitar</button>
-                  </div>
-                </article>
-              ))}
-
-              <button className="sp-shop-clear" onClick={clear}>Vaciar carrito</button>
+          <div className="sp-cart-layout">
+            <section className="sp-card">
+              <div className="sp-card-head"><div><span>FOTOS</span><h2>{items} {items === 1 ? 'fotografía' : 'fotografías'}</h2></div><button className="sp-link-button" onClick={clear}>Vaciar carrito</button></div>
+              <div className="sp-cart-list">
+                {cart.map(item => (
+                  <article className="sp-cart-item" key={item.id}>
+                    <div className="sp-cart-image">{item.url ? <img src={item.url} alt="" /> : <span>SPORTPHOTO</span>}</div>
+                    <div className="sp-cart-info"><strong>{item.participant_name || item.file_name || 'Fotografía'}</strong><small>{item.dorsal ? `Dorsal ${item.dorsal}` : 'Fotografía deportiva'}</small><button className="sp-remove" onClick={() => remove(item.id)}>Eliminar</button></div>
+                    <div className="sp-cart-controls"><div className="sp-qty"><button onClick={() => changeQuantity(item.id, -1)}>−</button><span>{item.quantity || 1}</span><button onClick={() => changeQuantity(item.id, 1)}>+</button></div><strong>{money(Number(item.price || 0) * Number(item.quantity || 1))}</strong></div>
+                  </article>
+                ))}
+              </div>
             </section>
-
-            <aside className="sp-shop-summary">
-              <div className="sp-shop-kicker">RESUMEN</div>
-              <h2>Tu pedido</h2>
-              <div className="sp-summary-row"><span>Fotografías</span><strong>{totalItems}</strong></div>
+            <aside className="sp-card sp-summary-card">
+              <span>RESUMEN</span><h2>Total</h2>
               <div className="sp-summary-row"><span>Subtotal</span><strong>{money(subtotal)}</strong></div>
-              {discount > 0 && <div className="sp-summary-discount"><span>Descuento ({Math.round(discountRate * 100)}%)</span><strong>−{money(discount)}</strong></div>}
-              <div className="sp-summary-divider" />
-              <div className="sp-summary-total"><span>Total</span><strong>{money(total)}</strong></div>
-              <button className="sp-shop-primary sp-full" onClick={() => navigate('/checkout')}>Continuar al checkout →</button>
+              <div className="sp-summary-row"><span>Descuento</span><strong>{money(0)}</strong></div>
+              <div className="sp-total"><span>Total</span><strong>{money(subtotal)}</strong></div>
+              <button className="sp-primary sp-wide" onClick={() => navigate('/checkout')}>Continuar al checkout →</button>
+              <button className="sp-secondary sp-wide" onClick={() => navigate('/')}>Seguir comprando</button>
             </aside>
           </div>
         )}
